@@ -3,14 +3,36 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <asm/uaccess.h>
-#include <sys/ioctl.h>
-#include <fcntl.h>
+#include <linux/syscalls.h>
+#include <linux/types.h>
+#include <linux/stat.h>
+#include <linux/fcntl.h>
 #include <linux/spi/spidev.h>
+#include <linux/unistd.h>
 
 #define STRAND_LEN 160 // Length of data memory
 #define DEVICE "/dev/spidev2.0"
 #define BYTESIZE 8
 #define SPEED 5000000
+
+static int fd;
+
+static void transfer(char *tx, int size)
+{
+  int ret;
+  struct spi_ioc_transfer tr = {
+    .tx_buf = (unsigned long)tx,
+    .len = size,
+    .delay_usecs = 0,
+    .speed_hz = SPEED,
+    .bits_per_word = BYTESIZE,
+  };
+
+  ret = sys_ioctl(fd, SPI_IOC_MESSAGE(1), (unsigned long)&tr);
+  if (ret < 1) {
+    printk("Can't send spi message");
+  }
+}
 
 struct lpd8806_obj {
   struct kobject kobj;
@@ -112,6 +134,7 @@ static struct lpd8806_obj *rgb_obj;
 static struct lpd8806_obj *create_lpd8806_obj(const char *name) {
   struct lpd8806_obj *obj;
   int retval;
+  int i, j;
   
   obj = kzalloc(sizeof(*obj), GFP_KERNEL);
   if (!obj) {
@@ -126,8 +149,6 @@ static struct lpd8806_obj *create_lpd8806_obj(const char *name) {
   }
   memset(obj->rgb, 0, 3);
   
-  int i;
-  int j;
   for (i = 0; i < STRAND_LEN; i++) {
     for (j = 0; j < 3; j++) {
       obj->data[i][j] = 0;
@@ -145,82 +166,60 @@ static struct lpd8806_obj *create_lpd8806_obj(const char *name) {
   return obj;
 }
 
-static void transfer(char *tx, int size)
-{
-    int ret;
-    char rx[size] = {0, };
-    struct spi_ioc_transfer tr = {
-        .tx_buf = (unsigned long)tx,
-        .rx_buf = (unsigned long)rx,
-        .len = size,
-        .delay_usecs = 0,
-        .speed_hz = SPEED,
-        .bits_per_word = BYTESIZE,
-    };
-
-    ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
-    if (ret < 1)
-        pabort("can't send spi message");
-
-    for (ret = 0; ret < size; ret++) {
-        if (!(ret % 6))
-            puts("");
-        printf("%.2X ", rx[ret]);
-    }
-    puts("");
-}
-
 static void destroy_lpd8806_obj(struct lpd8806_obj *obj) {
   kfree(&obj->rgb);
   kobject_put(&obj->kobj);
 }
 
 static int __init lpd8806_init(void) {
-  lpd8806_kset = kset_create_and_add("lpd8806", NULL, firmware_kobj);
-  int ret = 0;
-  int fd;
+  int ret;
   int mode;
+  
+  int bits = BYTESIZE;
+  int speed = SPEED;
 
-  fd = open(DEVICE, O_RDWR);
+  lpd8806_kset = kset_create_and_add("lpd8806", NULL, firmware_kobj);
+
+  fd = sys_open(DEVICE, O_RDWR, 0);
   if (fd < 0)
-    pabort("can't open device");
+    printk("can't open device");
 
-    /*
-     * spi mode
-     */
-  ret = ioctl(fd, SPI_IOC_WR_MODE, &mode);
+  /*
+   * spi mode
+   */
+  ret = sys_ioctl(fd, SPI_IOC_WR_MODE, (unsigned long)&mode);
   if (ret == -1)
-      pabort("can't set spi mode");
+      printk("can't set spi mode");
 
-  ret = ioctl(fd, SPI_IOC_RD_MODE, &mode);
+  ret = sys_ioctl(fd, SPI_IOC_RD_MODE, (unsigned long)&mode);
   if (ret == -1)
-      pabort("can't get spi mode");
+      printk("can't get spi mode");
 
   /*
    * bits per word
    */
-  ret = ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &bits);
+  ret = sys_ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, (unsigned long)&bits);
   if (ret == -1)
-      pabort("can't set bits per word");
+      printk("can't set bits per word");
 
-  ret = ioctl(fd, SPI_IOC_RD_BITS_PER_WORD, &bits);
+  ret = sys_ioctl(fd, SPI_IOC_RD_BITS_PER_WORD, (unsigned long)&bits);
   if (ret == -1)
-      pabort("can't get bits per word");
+      printk("can't get bits per word");
 
   /*
    * max speed hz
    */
-  ret = ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed);
+  ret = sys_ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, (unsigned long)&speed);
   if (ret == -1)
-      pabort("can't set max speed hz");
+      printk("can't set max speed hz");
 
-  ret = ioctl(fd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);
+  ret = sys_ioctl(fd, SPI_IOC_RD_MAX_SPEED_HZ, (unsigned long)&speed);
   if (ret == -1)
-      pabort("can't get max speed hz");
+      printk("can't get max speed hz");
 
-  printf("spi mode: %d\n", mode);
-  printf("bits per word: %d\n", bits);
-  printf("max speed: %d Hz (%d KHz)\n", speed, speed/1000);
+  printk("spi mode: %d\n", mode);
+  printk("bits per word: %d\n", bits);
+  printk("max speed: %d Hz (%d KHz)\n", speed, speed/1000);
 
   if (!lpd8806_kset) {
     kset_unregister(lpd8806_kset);
@@ -239,7 +238,7 @@ static int __init lpd8806_init(void) {
 }
 
 static void __exit lpd8806_exit(void) {
-  close(fd);
+  sys_close(fd);
   destroy_lpd8806_obj(rgb_obj);
   kset_unregister(lpd8806_kset);
   printk("LPD8806 Driver Removed\n");
