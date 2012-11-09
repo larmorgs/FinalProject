@@ -11,19 +11,13 @@
 #define DELAY 200000
 
 static FILE *grb_fp;
-static FILE *data_fp;
 
 void clear() {
   int i;
-  unsigned char data[STRAND_LEN * 3];
-  
-  for (i = 0; i < STRAND_LEN * 3; i++) {
-    data[i] = 0;
+  for (i = 0; i < STRAND_LEN; i++) {
+    fprintf(grb_fp, "0 0 0");
+    fflush(grb_fp);
   }
-  for (i = 0; i < STRAND_LEN * 3; i += 3) {
-    fprintf(data_fp, "%d %d %d ", data[i], data[i+1], data[i+2]);
-  }
-  fflush(data_fp);
 }
 
 void pattern1() {
@@ -36,8 +30,7 @@ void pattern1() {
     data[1] = rand() % 0x7F;
     data[2] = rand() % 0x7F;
     
-    fprintf(grb_fp, "%d %d %d", data[0], data[1], data[2]);
-    fflush(grb_fp);
+    fprintf(grb_fp, "%d %d %d\n", data[0], data[1], data[2]);
     usleep(DELAY);
   }
 }
@@ -53,11 +46,10 @@ void pattern2() {
     for (j = 0; j < STRAND_LEN * 3; j++) {
       data[j] = temp;
     }
-    fprintf(data_fp, "%d %d %d", data[0], data[1], data[2]);
     for (j = 3; j < STRAND_LEN * 3; j += 3) {
-      fprintf(data_fp, " %d %d %d", data[j], data[j+1], data[j+2]);
+      fprintf(grb_fp, "%d %d %d", data[j], data[j+1], data[j+2]);
+      fflush(grb_fp);
     }
-    fflush(data_fp);
     usleep(DELAY);
   }
 }
@@ -79,19 +71,14 @@ int main() {
     return 1;
   }
   
-  data_fp = fopen("/sys/firmware/spi-lpd8806/device/data", "w");
-  if (data_fp == NULL) {
-    return 1;
-  }
-
   if (signal(SIGINT, signal_handler) == SIG_ERR) {
     printf("Error with SIGINT handler\n");
     return 1;
   }
   
   while (1) {
-    clear();
-    pattern2();
+//    clear();
+//    pattern2();
     pattern1();
   }
 }
