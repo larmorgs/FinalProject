@@ -30,7 +30,8 @@ void pattern1() {
     data[1] = rand() % 0x7F;
     data[2] = rand() % 0x7F;
     
-    fprintf(grb_fp, "%d %d %d\n", data[0], data[1], data[2]);
+    fprintf(grb_fp, "%d %d %d", data[0], data[1], data[2]);
+    fflush(grb_fp);
     usleep(DELAY);
   }
 }
@@ -76,9 +77,9 @@ int main() {
     return 1;
   }
   
-  while (1) {
+//  while (1) {
 //    clear();
 //    pattern2();
     pattern1();
-  }
+//  }
 }
