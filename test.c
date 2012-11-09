@@ -13,7 +13,6 @@ void clear() {
   int i;
   for (i = 0; i < STRAND_LEN; i++) {
     fprintf(grb_fp, "0 0 0\n");
-    fflush(grb_fp);
   }
 }
 
