@@ -5,7 +5,15 @@
 #include <asm/uaccess.h>
 #include <linux/spi/spi.h>
 
+#define DRIVER_NAME "spi-lpd8806"
+
 #define STRAND_LEN 160 // Length of data memory
+
+#define SPI_BUS_NUM 2
+#define SPI_BUS_SPEED 500000
+#define SPI_CS 0
+
+static struct spi_device *device;
 
 struct lpd8806_obj {
   struct kobject kobj;
@@ -76,7 +84,6 @@ static ssize_t lpd8806_show(struct lpd8806_obj *obj, struct lpd8806_attr *attr, 
 static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr, const char *buf, size_t count) {
   if (strcmp(attr->attr.name, "rgb") == 0) {
     int i;
-    unsigned char temp, next;
     sscanf(buf, "%hhu %hhu %hhu", &obj->rgb[0], &obj->rgb[1], &obj->rgb[2]);
     for (i = STRAND_LEN - 1; i > 0; i--) {
       obj->data[i][0] = obj->data[i-1][0];
@@ -91,7 +98,7 @@ static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr,
     int i = 0;
     char *temp;
     char *tok;
-    temp = kmalloc(strlen(buf), GFP_KERNEL);
+    temp = kzalloc(strlen(buf), GFP_KERNEL);
     if (temp) {
       strcpy(temp, buf);
       tok = strsep(&temp, " ");      
@@ -104,6 +111,10 @@ static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr,
         }
         tok = strsep(&temp, " ");
       }
+      obj->rgb[0] = obj->data[0][0];
+      obj->rgb[1] = obj->data[0][1];
+      obj->rgb[2] = obj->data[0][2];
+      
       kfree(temp);
       return count;
     }
@@ -158,17 +169,20 @@ static struct lpd8806_obj *create_lpd8806_obj(const char *name) {
   }
   
   kobject_uevent(&obj->kobj, KOBJ_ADD);
-  
   return obj;
 }
 
 static void destroy_lpd8806_obj(struct lpd8806_obj *obj) {
-  kfree(&obj->rgb);
   kobject_put(&obj->kobj);
 }
 
 static int __init lpd8806_init(void) {
-  lpd8806_kset = kset_create_and_add("spi-lpd8806", NULL, firmware_kobj);
+  int status;
+  struct spi_master *master;
+  struct device *temp;
+  char buff[20];
+  
+  lpd8806_kset = kset_create_and_add(DRIVER_NAME, NULL, firmware_kobj);
   if (!lpd8806_kset) {
     kset_unregister(lpd8806_kset);
     printk("LPD8806 Driver Init Failed: %d\n", -ENOMEM);
@@ -181,11 +195,56 @@ static int __init lpd8806_init(void) {
     printk("LPD8806 Driver Init Failed: %d\n", -EINVAL);
     return -EINVAL;
   }
+  
+  master = spi_busnum_to_master(SPI_BUS_NUM);
+  if (!master) {
+    destroy_lpd8806_obj(device_obj);
+    kset_unregister(lpd8806_kset);
+    printk("LPD8806 Driver Init Failed: Bad Master\n");
+    return -EINVAL;
+  }
+  
+  device = spi_alloc_device(master);
+  if (!device) {
+    put_device(&master->dev);
+    destroy_lpd8806_obj(device_obj);
+    kset_unregister(lpd8806_kset);
+    printk("LPD8806 Driver Init Failed: Bad Device\n");
+    return -EINVAL;
+  }
+  
+  device->chip_select = SPI_CS;
+  snprintf(buff, sizeof(buff), "%s.%u", dev_name(&device->master->dev), device->chip_select);
+  
+  temp = bus_find_device_by_name(device->dev.bus, NULL, buff);
+  if (temp) {
+    spi_unregister_device(to_spi_device(temp));
+  }
+  
+  device->max_speed_hz = SPI_BUS_SPEED;
+  device->mode = SPI_MODE_0;
+  device->bits_per_word = 8;
+  device->irq = -1;
+  device->controller_state = NULL;
+  device->controller_data = NULL;
+  strcpy(device->modalias, DRIVER_NAME);
+  
+  status = spi_add_device(device);
+  
+  if (status < 0) {
+    spi_dev_put(device);
+    destroy_lpd8806_obj(device_obj);
+    kset_unregister(lpd8806_kset);
+    printk("LPD8806 Driver Init Failed: Add Device Failed\n");
+    return status;
+  }
+  
   printk("LPD8806 Driver Added\n");
   return 0;
 }
 
 static void __exit lpd8806_exit(void) {
+  spi_unregister_device(device);
   destroy_lpd8806_obj(device_obj);
   kset_unregister(lpd8806_kset);
   printk("LPD8806 Driver Removed\n");
