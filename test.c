@@ -1,66 +1,77 @@
+#include <time.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 
-#define TIME 160
+#define STRAND_LEN 160 // Number of LEDs on strand
+
+#define TIME 1000
+#define DELAY 1000
+
+static FILE *grb_fp;
+static FILE *data_fp;
+
+void pattern1() {
+  int i;
+  unsigned char data[3];
+  
+  for (i = 0; i < TIME; i++) {
+    data[0] = i % 0x7F;
+    data[1] = i % 0x3F;
+    data[2] = i % 0x1F;
+    fprintf(grb_fp, "%d %d %d", data[0], data[1], data[2]);
+    fflush(grb_fp);
+    usleep(DELAY);
+  }
+}
+
+void pattern2() {
+  int i, j;
+  unsigned char data[STRAND_LEN * 3];
+  
+  for (i = 0; i < TIME; i++) {
+    for (j = 0; j < STRAND_LEN * 3; j++) {
+      data[j] = i % 0x3F + j % 0x3F;
+    }
+    for (j = 0; j < STRAND_LEN * 3; j += 3) {
+      fprintf(data_fp, "%d %d %d", data[i], data[i+1], data[i+2]);
+    }
+    fflush(data_fp);
+    usleep(DELAY);
+  }
+}
+
+//signal handler that breaks program loop and cleans up
+void signal_handler(int signo){
+  if (signo == SIGINT) {
+    printf("\n^C pressed, cleaning up and exiting..\n");
+    fflush(stdout);
+    fflush(grb_fp);
+    fclose(grb_fp);
+    exit(0);
+  }
+}
 
 int main() { 
-  unsigned char data[] = {0, 50, 100};
-  FILE *fp;
-  
-  fp = fopen("/sys/firmware/spi-lpd8806/device/grb", "w");
-  if (fp == NULL) {
+  grb_fp = fopen("/sys/firmware/spi-lpd8806/device/grb", "w");
+  if (grb_fp == NULL) {
     return 1;
   }
   
-  int i;
-
-  unsigned char dg = 1;
-  unsigned char dr = 1;
-  unsigned char db = 0;
-  
-  for (i = 0; i < TIME; i++) {    
-    if (!dg) {
-      data[0]++;
-      if (data[0] == 0x7F) {
-        dg = 0;
-      }
-    } else {
-      data[0]--;
-      if (data[0] == 0) {
-        dg = 1;
-      }
-    }
-
-    if (!dr) {
-      data[1]++;
-      if (data[1] == 0x7F) {
-        dr = 0;
-      } 
-    } else {
-      data[1]--;
-      if (data[1] == 0) {
-        dr = 1;
-      }
-    }
-
-    if (!db) {
-      data[2]++;
-      if (data[2] == 0x7F) {
-        db = 0;
-      }
-    } else {
-      data[2]--;
-      if (data[2] == 0) {
-        db = 1;
-      }
-    }
-    
-
-    fprintf(fp, "%d %d %d", data[0], data[1], data[2]);
-    fflush(fp);
-  
+  data_fp = fopen("/sys/firmware/spi-lpd8806/device/grb", "w");
+  if (data_fp == NULL) {
+    return 1;
   }
 
-  fclose(fp);
+  if (signal(SIGINT, signal_handler) == SIG_ERR) {
+    printf("Error with SIGINT handler\n");
+    return 1;
+  }
+  
+  while (1) {
+    pattern1();
+    pattern2();
+  }
 }
