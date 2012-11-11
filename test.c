@@ -2,28 +2,65 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#define STRAND_LEN 160 // Length of data memory
+#define TIME 160
 
 int main() { 
-  unsigned char data[STRAND_LEN][3];
+  unsigned char data[] = {0, 50, 100};
   FILE *fp;
   
-  fp = fopen("/sys/firmware/lpd8806/device/rgb", "w");
+  fp = fopen("/sys/firmware/spi-lpd8806/device/grb", "w");
   if (fp == NULL) {
     return 1;
   }
   
   int i;
+
+  unsigned char dg = 1;
+  unsigned char dr = 1;
+  unsigned char db = 0;
   
-  for (i = 0; i < STRAND_LEN; i++) {
-    data[i][0] = i;
-    data[i][1] = 255 - i;
-    data[i][2] = 160 - i;
+  for (i = 0; i < TIME; i++) {    
+    if (!dg) {
+      data[0]++;
+      if (data[0] == 0x7F) {
+        dg = 0;
+      }
+    } else {
+      data[0]--;
+      if (data[0] == 0) {
+        dg = 1;
+      }
+    }
+
+    if (!dr) {
+      data[1]++;
+      if (data[1] == 0x7F) {
+        dr = 0;
+      } 
+    } else {
+      data[1]--;
+      if (data[1] == 0) {
+        dr = 1;
+      }
+    }
+
+    if (!db) {
+      data[2]++;
+      if (data[2] == 0x7F) {
+        db = 0;
+      }
+    } else {
+      data[2]--;
+      if (data[2] == 0) {
+        db = 1;
+      }
+    }
+    
+
+    fprintf(fp, "%d %d %d", data[0], data[1], data[2]);
+    fflush(fp);
+  
   }
-  
-  for (i = 0; i < STRAND_LEN; i++) {
-    fprintf(fp, "%d %d %d\n", data[i][0], data[i][1], data[i][2]);
-  }
-  
+
   fclose(fp);
 }
