@@ -10,7 +10,7 @@
 #define STRAND_LEN 160 // Length of data memory
 
 #define SPI_BUS_NUM 2
-#define SPI_BUS_SPEED 500000
+#define SPI_BUS_SPEED 100000
 #define SPI_CS 0
 
 static struct spi_device *device;
@@ -93,6 +93,7 @@ static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr,
     obj->data[0][0] = obj->rgb[0];
     obj->data[0][1] = obj->rgb[1];
     obj->data[0][2] = obj->rgb[2];
+    spi_write(device, &obj->rgb[0], 3);
     return count;
   } else if (strcmp(attr->attr.name, "data") == 0) {
     int i = 0;
@@ -114,6 +115,8 @@ static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr,
       obj->rgb[0] = obj->data[0][0];
       obj->rgb[1] = obj->data[0][1];
       obj->rgb[2] = obj->data[0][2];
+      
+      spi_write(device, &obj->data[0][0], STRAND_LEN * 3);
       
       kfree(temp);
       return count;
