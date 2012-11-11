@@ -75,7 +75,17 @@ static ssize_t lpd8806_show(struct lpd8806_obj *obj, struct lpd8806_attr *attr, 
 
 static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr, const char *buf, size_t count) {
   if (strcmp(attr->attr.name, "rgb") == 0) {
+    int i;
+    unsigned char temp, next;
     sscanf(buf, "%hhu %hhu %hhu", &obj->rgb[0], &obj->rgb[1], &obj->rgb[2]);
+    for (i = STRAND_LEN - 1; i > 0; i--) {
+      obj->data[i][0] = obj->data[i-1][0];
+      obj->data[i][1] = obj->data[i-1][1];
+      obj->data[i][2] = obj->data[i-1][2];
+    }
+    obj->data[0][0] = obj->rgb[0];
+    obj->data[0][1] = obj->rgb[1];
+    obj->data[0][2] = obj->rgb[2];
     return count;
   } else if (strcmp(attr->attr.name, "data") == 0) {
     int i = 0;
