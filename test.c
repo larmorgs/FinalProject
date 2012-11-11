@@ -8,7 +8,7 @@
 #define STRAND_LEN 160 // Number of LEDs on strand
 
 #define TIME 1000
-#define DELAY 50000
+#define DELAY 200000
 
 static FILE *grb_fp;
 static FILE *data_fp;
@@ -53,32 +53,9 @@ void pattern2() {
     for (j = 0; j < STRAND_LEN * 3; j++) {
       data[j] = temp;
     }
-    for (j = 0; j < STRAND_LEN * 3; j += 3) {
-      fprintf(data_fp, "%d %d %d ", data[j], data[j+1], data[j+2]);
-    }
-    fflush(data_fp);
-    usleep(DELAY);
-  }
-}
-
-void pattern3() {
-  int i;
-  unsigned char data[3];
-  
-  for (i = 0; i < TIME; i++) {
-    fprintf(grb_fp, "%d %d %d", data[0], data[1], data[2]);
-    fflush(grb_fp);
-    usleep(DELAY);
-  }
-}
-
-void pattern4() {
-  int i, j;
-  unsigned char data[STRAND_LEN * 3];
-  
-  for (i = 0; i < TIME; i++) {
-    for (j = 0; j < STRAND_LEN * 3; j += 3) {
-      fprintf(data_fp, "%d %d %d", data[i], data[i+1], data[i+2]);
+    fprintf(data_fp, "%d %d %d", data[0], data[1], data[2]);
+    for (j = 3; j < STRAND_LEN * 3; j += 3) {
+      fprintf(data_fp, " %d %d %d", data[j], data[j+1], data[j+2]);
     }
     fflush(data_fp);
     usleep(DELAY);
@@ -102,7 +79,7 @@ int main() {
     return 1;
   }
   
-  data_fp = fopen("/sys/firmware/spi-lpd8806/device/grb", "w");
+  data_fp = fopen("/sys/firmware/spi-lpd8806/device/data", "w");
   if (data_fp == NULL) {
     return 1;
   }
