@@ -2,22 +2,28 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#define STRAND_LEN 160 // Length of data memory
+
 int main() { 
-  char out[] = "Testing12";
-  char in[10];
+  unsigned char data[STRAND_LEN][3];
   FILE *fp;
   
-  fp = fopen("/sys/", "rw");
+  fp = fopen("/sys/firmware/lpd8806/device/rgb", "w");
   if (fp == NULL) {
     return 1;
   }
   
-  fwrite(out, 1, 10, fp);
+  int i;
   
-  fread(in, 1, 10, fp);
+  for (i = 0; i < STRAND_LEN; i++) {
+    data[i][0] = i;
+    data[i][1] = 255 - i;
+    data[i][2] = 160 - i;
+  }
+  
+  for (i = 0; i < STRAND_LEN; i++) {
+    fprintf(fp, "%d %d %d\n", data[i][0], data[i][1], data[i][2]);
+  }
   
   fclose(fp);
-  
-  printf("Output: %s\n", out);
-  printf("Input: %s\n", in);
 }
