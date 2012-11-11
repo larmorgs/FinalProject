@@ -10,15 +10,15 @@
 #define STRAND_LEN 160 // Length of data memory
 
 #define SPI_BUS_NUM 2
-#define SPI_BUS_SPEED 100000
+#define SPI_BUS_SPEED 2000000
 #define SPI_CS 0
 
 static struct spi_device *device;
 
 struct lpd8806_obj {
   struct kobject kobj;
-  unsigned char rgb[3];
-  unsigned char data[STRAND_LEN][3];
+  unsigned char grb[3];
+  unsigned char data[STRAND_LEN * 3 + 1];
 };
 #define to_lpd8806_obj(x) container_of(x, struct lpd8806_obj, kobj)
 
@@ -67,13 +67,13 @@ static void lpd8806_release(struct kobject *kobj) {
 }
 
 static ssize_t lpd8806_show(struct lpd8806_obj *obj, struct lpd8806_attr *attr, char *buf) {
-  if (strcmp(attr->attr.name, "rgb") == 0) {
-    return sprintf(buf, "[%hhu %hhu %hhu]\n", obj->rgb[0], obj->rgb[1], obj->rgb[2]);
+  if (strcmp(attr->attr.name, "grb") == 0) {
+    return sprintf(buf, "[%hhu %hhu %hhu]\n", obj->grb[0] & 0x7F, obj->grb[1] & 0x7F, obj->grb[2] & 0x7F);
   } else if (strcmp(attr->attr.name, "data") == 0) {
     int i;
     int count;
-    for (i = 0; i < STRAND_LEN; i++) {
-      count = sprintf(buf, "%s%d [%hhu %hhu %hhu]\n", buf, i, obj->data[i][0], obj->data[i][1], obj->data[i][2]);  
+    for (i = 0; i < STRAND_LEN * 3; i += 3) {
+      count = sprintf(buf, "%s%d [%hhu %hhu %hhu]\n", buf, i, obj->data[i] & 0x7F, obj->data[i+1] & 0x7F, obj->data[i+2] & 0x7F);  
     }
     return count;
   } else {
@@ -81,22 +81,49 @@ static ssize_t lpd8806_show(struct lpd8806_obj *obj, struct lpd8806_attr *attr, 
   }
 }
 
-static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr, const char *buf, size_t count) {
-  if (strcmp(attr->attr.name, "rgb") == 0) {
-    int i;
-    sscanf(buf, "%hhu %hhu %hhu", &obj->rgb[0], &obj->rgb[1], &obj->rgb[2]);
-    for (i = STRAND_LEN - 1; i > 0; i--) {
-      obj->data[i][0] = obj->data[i-1][0];
-      obj->data[i][1] = obj->data[i-1][1];
-      obj->data[i][2] = obj->data[i-1][2];
+static int update_strand(struct lpd8806_obj *obj) {
+  int i, ret;
+  for (i = 0; i < 3 * STRAND_LEN; i += 3) {
+    ret = spi_write(device, &obj->data[i], 3);
+    if (ret != 0) {
+      printk("LPD8806 Strand Write Failure: %d", ret);
+      return 1;
     }
-    obj->data[0][0] = obj->rgb[0];
-    obj->data[0][1] = obj->rgb[1];
-    obj->data[0][2] = obj->rgb[2];
-    spi_write(device, &obj->rgb[0], 3);
-    return count;
+  }
+  
+  ret = spi_write(device, &obj->data[i], 1);
+  if (ret != 0) {
+    printk("LPD8806 Strand Latch Failure: %d", ret);
+    return 1;
+  }
+  return 0;
+}
+
+static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr, const char *buf, size_t count) {
+  if (strcmp(attr->attr.name, "grb") == 0) {
+    int i;
+    unsigned char g, r, b;
+    if (sscanf(buf, "%hhu %hhu %hhu", &g, &r, &b) == 3) {
+      obj->grb[0] = g | 0x80;
+      obj->grb[1] = r | 0x80;
+      obj->grb[2] = b | 0x80;
+      
+      for (i = 3 * (STRAND_LEN - 1); i > 0; i -= 3) {
+        obj->data[i] = obj->data[i-3];
+        obj->data[i+1] = obj->data[i-2];
+        obj->data[i+2] = obj->data[i-1];
+      }
+      obj->data[0] = obj->grb[0];
+      obj->data[1] = obj->grb[1];
+      obj->data[2] = obj->grb[2];
+      
+      if (update_strand(obj) == 0) {
+        return count;
+      }
+    }
   } else if (strcmp(attr->attr.name, "data") == 0) {
     int i = 0;
+    unsigned char color;
     char *temp;
     char *tok;
     temp = kzalloc(strlen(buf), GFP_KERNEL);
@@ -104,32 +131,33 @@ static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr,
       strcpy(temp, buf);
       tok = strsep(&temp, " ");      
       while (tok) {
-        if (sscanf(tok, "%hhu", &obj->data[0][0]+i) == 1) {
+        if (sscanf(tok, "%hhu", &color) == 1) {
+          obj->data[i] = color | 0x80;
           i++;
-          if (i == 3*STRAND_LEN) {
+          if (i == 3 * STRAND_LEN) {
             break;
           }
         }
         tok = strsep(&temp, " ");
       }
-      obj->rgb[0] = obj->data[0][0];
-      obj->rgb[1] = obj->data[0][1];
-      obj->rgb[2] = obj->data[0][2];
-      
-      spi_write(device, &obj->data[0][0], STRAND_LEN * 3);
+      obj->grb[0] = obj->data[0];
+      obj->grb[1] = obj->data[1];
+      obj->grb[2] = obj->data[2];
       
       kfree(temp);
-      return count;
+      if (update_strand(obj) == 0) {
+        return count;
+      }
     }
   }
   return 0;
 }
 
-static struct lpd8806_attr rgb_attr = __ATTR(rgb, 0666, lpd8806_show, lpd8806_store);
+static struct lpd8806_attr grb_attr = __ATTR(grb, 0666, lpd8806_show, lpd8806_store);
 static struct lpd8806_attr data_attr = __ATTR(data, 0666, lpd8806_show, lpd8806_store);
 
 static struct attribute *lpd8806_default_attrs[] = {
-  &rgb_attr.attr,
+  &grb_attr.attr,
   &data_attr.attr,
   NULL
 };
@@ -146,7 +174,7 @@ static struct lpd8806_obj *device_obj;
 static struct lpd8806_obj *create_lpd8806_obj(const char *name) {
   struct lpd8806_obj *obj;
   int retval;
-  int i, j;
+  int i;
   
   obj = kzalloc(sizeof(*obj), GFP_KERNEL);
   if (!obj) {
@@ -156,13 +184,11 @@ static struct lpd8806_obj *create_lpd8806_obj(const char *name) {
   obj->kobj.kset = lpd8806_kset;
 
   for (i = 0; i < 3; i++) {
-    obj->rgb[i] = 0;
+    obj->grb[i] = 0;
   }
   
-  for (i = 0; i < STRAND_LEN; i++) {
-    for (j = 0; j < 3; j++) {
-      obj->data[i][j] = 0;
-    }
+  for (i = 0; i < STRAND_LEN * 3; i++) {
+    obj->data[i] = 0;
   }
   
   retval = kobject_init_and_add(&obj->kobj, &lpd8806_ktype, NULL, "%s", name);
@@ -181,6 +207,7 @@ static void destroy_lpd8806_obj(struct lpd8806_obj *obj) {
 
 static int __init lpd8806_init(void) {
   int status;
+  unsigned char latch[] = {0, 0, 0};
   struct spi_master *master;
   struct device *temp;
   char buff[20];
@@ -240,6 +267,10 @@ static int __init lpd8806_init(void) {
     kset_unregister(lpd8806_kset);
     printk("LPD8806 Driver Init Failed: Add Device Failed\n");
     return status;
+  }
+  
+  if (spi_write(device, latch, 3) != 0) {
+    printk("LPD8806 Driver Init Failed: Prime SPI Failed\n");
   }
   
   printk("LPD8806 Driver Added\n");
