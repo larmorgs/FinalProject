@@ -8,7 +8,7 @@
 #define STRAND_LEN 160 // Number of LEDs on strand
 
 #define TIME 1000
-#define DELAY 1000
+#define DELAY 50000
 
 static FILE *grb_fp;
 static FILE *data_fp;
