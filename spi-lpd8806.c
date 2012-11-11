@@ -3,13 +3,14 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <asm/uaccess.h>
+#include <linux/spi/spi.h>
 
 #define STRAND_LEN 160 // Length of data memory
 
 struct lpd8806_obj {
   struct kobject kobj;
-  unsigned char *rgb;
-  unsigned char **data;
+  unsigned char rgb[3];
+  unsigned char data[STRAND_LEN][3];
 };
 #define to_lpd8806_obj(x) container_of(x, struct lpd8806_obj, kobj)
 
@@ -62,9 +63,9 @@ static ssize_t lpd8806_show(struct lpd8806_obj *obj, struct lpd8806_attr *attr, 
     return sprintf(buf, "[%hhu %hhu %hhu]\n", obj->rgb[0], obj->rgb[1], obj->rgb[2]);
   } else if (strcmp(attr->attr.name, "data") == 0) {
     int i;
-    int count = 0;
+    int count;
     for (i = 0; i < STRAND_LEN; i++) {
-      count += sprintf(buf, "%s[%hhu %hhu %hhu]\n", buf, obj->data[i][0], obj->data[i][1], obj->data[i][2]);  
+      count = sprintf(buf, "%s%d [%hhu %hhu %hhu]\n", buf, i, obj->data[i][0], obj->data[i][1], obj->data[i][2]);  
     }
     return count;
   } else {
@@ -77,11 +78,27 @@ static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr,
     sscanf(buf, "%hhu %hhu %hhu", &obj->rgb[0], &obj->rgb[1], &obj->rgb[2]);
     return count;
   } else if (strcmp(attr->attr.name, "data") == 0) {
-    // Add in recursive data setting for entire strand
-    return count;
-  } else {
-    return 0;
+    int i = 0;
+    char *temp;
+    char *tok;
+    temp = kmalloc(strlen(buf), GFP_KERNEL);
+    if (temp) {
+      strcpy(temp, buf);
+      tok = strsep(&temp, " ");      
+      while (tok) {
+        if (sscanf(tok, "%hhu", &obj->data[0][0]+i) == 1) {
+          i++;
+          if (i == 3*STRAND_LEN) {
+            break;
+          }
+        }
+        tok = strsep(&temp, " ");
+      }
+      kfree(temp);
+      return count;
+    }
   }
+  return 0;
 }
 
 static struct lpd8806_attr rgb_attr = __ATTR(rgb, 0666, lpd8806_show, lpd8806_store);
@@ -100,11 +117,12 @@ static struct kobj_type lpd8806_ktype = {
 };
 
 static struct kset *lpd8806_kset;
-static struct lpd8806_obj *rgb_obj;
+static struct lpd8806_obj *device_obj;
 
 static struct lpd8806_obj *create_lpd8806_obj(const char *name) {
   struct lpd8806_obj *obj;
   int retval;
+  int i, j;
   
   obj = kzalloc(sizeof(*obj), GFP_KERNEL);
   if (!obj) {
@@ -113,20 +131,10 @@ static struct lpd8806_obj *create_lpd8806_obj(const char *name) {
     
   obj->kobj.kset = lpd8806_kset;
 
-  obj->rgb = kmalloc(3, GFP_KERNEL);
-  if (!obj->rgb) {
-    return NULL;
+  for (i = 0; i < 3; i++) {
+    obj->rgb[i] = 0;
   }
-  memset(obj->rgb, 0, 3);
   
-  obj->rgb = kmalloc(3, GFP_KERNEL);
-  if (!obj->rgb) {
-    return NULL;
-  }
-  memset(obj->rgb, 0, 3);
-  
-  int i;
-  int j;
   for (i = 0; i < STRAND_LEN; i++) {
     for (j = 0; j < 3; j++) {
       obj->data[i][j] = 0;
@@ -149,15 +157,15 @@ static void destroy_lpd8806_obj(struct lpd8806_obj *obj) {
 }
 
 static int __init lpd8806_init(void) {
-  lpd8806_kset = kset_create_and_add("lpd8806", NULL, firmware_kobj);
+  lpd8806_kset = kset_create_and_add("spi-lpd8806", NULL, firmware_kobj);
   if (!lpd8806_kset) {
     kset_unregister(lpd8806_kset);
     printk("LPD8806 Driver Init Failed: %d\n", -ENOMEM);
     return -ENOMEM;
   }
-  rgb_obj = create_lpd8806_obj("device");
-  if (!rgb_obj) {
-    destroy_lpd8806_obj(rgb_obj);
+  device_obj = create_lpd8806_obj("device");
+  if (!device_obj) {
+    destroy_lpd8806_obj(device_obj);
     kset_unregister(lpd8806_kset);
     printk("LPD8806 Driver Init Failed: %d\n", -EINVAL);
     return -EINVAL;
@@ -167,7 +175,7 @@ static int __init lpd8806_init(void) {
 }
 
 static void __exit lpd8806_exit(void) {
-  destroy_lpd8806_obj(rgb_obj);
+  destroy_lpd8806_obj(device_obj);
   kset_unregister(lpd8806_kset);
   printk("LPD8806 Driver Removed\n");
 }
