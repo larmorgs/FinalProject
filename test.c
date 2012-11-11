@@ -13,6 +13,19 @@
 static FILE *grb_fp;
 static FILE *data_fp;
 
+void clear() {
+  int i;
+  unsigned char data[STRAND_LEN * 3];
+  
+  for (i = 0; i < STRAND_LEN * 3; i++) {
+    data[i] = 0;
+  }
+  for (i = 0; i < STRAND_LEN * 3; i += 3) {
+    fprintf(data_fp, "%d %d %d ", data[i], data[i+1], data[i+2]);
+  }
+  fflush(data_fp);
+}
+
 void pattern1() {
   int i;
   unsigned char data[3];
@@ -38,10 +51,10 @@ void pattern2() {
   for (i = 0; i < TIME; i++) {
     temp = rand() % 0x7F;
     for (j = 0; j < STRAND_LEN * 3; j++) {
-      data[i] = temp;
+      data[j] = temp;
     }
     for (j = 0; j < STRAND_LEN * 3; j += 3) {
-      fprintf(data_fp, "%d %d %d", data[i], data[i+1], data[i+2]);
+      fprintf(data_fp, "%d %d %d ", data[j], data[j+1], data[j+2]);
     }
     fflush(data_fp);
     usleep(DELAY);
@@ -100,7 +113,8 @@ int main() {
   }
   
   while (1) {
-    pattern1();
+    clear();
     pattern2();
+    pattern1();
   }
 }
