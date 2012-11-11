@@ -7,10 +7,11 @@
 
 #define DRIVER_NAME "spi-lpd8806"
 
-#define STRAND_LEN 160 // Length of data memory
+#define STRAND_LEN 160 // Number of LEDs on strand
 
+// SPI 2.0 running at 10MHz
 #define SPI_BUS_NUM 2
-#define SPI_BUS_SPEED 2000000
+#define SPI_BUS_SPEED 10000000
 #define SPI_CS 0
 
 static struct spi_device *device;
@@ -18,7 +19,7 @@ static struct spi_device *device;
 struct lpd8806_obj {
   struct kobject kobj;
   unsigned char grb[3];
-  unsigned char data[STRAND_LEN * 3 + 1];
+  unsigned char data[STRAND_LEN * 3];
 };
 #define to_lpd8806_obj(x) container_of(x, struct lpd8806_obj, kobj)
 
@@ -82,16 +83,14 @@ static ssize_t lpd8806_show(struct lpd8806_obj *obj, struct lpd8806_attr *attr, 
 }
 
 static int update_strand(struct lpd8806_obj *obj) {
-  int i, ret;
-  for (i = 0; i < 3 * STRAND_LEN; i += 3) {
-    ret = spi_write(device, &obj->data[i], 3);
-    if (ret != 0) {
-      printk("LPD8806 Strand Write Failure: %d", ret);
-      return 1;
-    }
+  int ret;
+  unsigned char latch[] = {0, 0, 0, 0, 0, 0};
+  ret = spi_write(device, &obj->data[0], 3 * STRAND_LEN);
+  if (ret != 0) {
+    printk("LPD8806 Strand Write Failure: %d", ret);
+    return 1;
   }
-  
-  ret = spi_write(device, &obj->data[i], 1);
+  ret = spi_write(device, latch, 6);
   if (ret != 0) {
     printk("LPD8806 Strand Latch Failure: %d", ret);
     return 1;
