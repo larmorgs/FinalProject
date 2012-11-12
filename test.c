@@ -7,9 +7,6 @@
 
 #define STRAND_LEN 160 // Number of LEDs on strand
 
-#define TIME 1000
-#define DELAY 200000
-
 static FILE *grb_fp;
 
 void clear() {
@@ -25,14 +22,14 @@ void pattern1() {
   unsigned char data[3];
   srand(time(NULL));
 
-  for (i = 0; i < TIME; i++) {
+  for (i = 0; i < STRAND_LEN; i++) {
     data[0] = rand() % 0x7F;
     data[1] = rand() % 0x7F;
     data[2] = rand() % 0x7F;
     
     fprintf(grb_fp, "%d %d %d", data[0], data[1], data[2]);
     fflush(grb_fp);
-    usleep(DELAY);
+    usleep(20000);
   }
 }
 
@@ -42,7 +39,7 @@ void pattern2() {
   unsigned char data[STRAND_LEN * 3];
   srand(time(NULL));
   
-  for (i = 0; i < TIME; i++) {
+  for (i = 0; i < 20; i++) {
     g = rand() % 0x7F;
     r = rand() % 0x7F;
     b = rand() % 0x7F;
@@ -55,7 +52,7 @@ void pattern2() {
       fprintf(grb_fp, "%d %d %d", data[j], data[j+1], data[j+2]);
       fflush(grb_fp);
     }
-    usleep(DELAY);
+    usleep(200000);
   }
 }
 

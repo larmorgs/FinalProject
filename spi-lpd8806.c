@@ -260,12 +260,7 @@ static int __init lpd8806_init(void) {
     return status;
   }
   
-  if (spi_write(device, latch, 6) != 0) {
-    spi_unregister_device(device);
-    destroy_lpd8806_obj(device_obj);
-    kset_unregister(lpd8806_kset);
-    printk("LPD8806 Driver Init Failed: Prime SPI Failed\n");
-  }
+  spi_write(device, latch, 6);
   
   printk("LPD8806 Driver Added\n");
   return 0;
