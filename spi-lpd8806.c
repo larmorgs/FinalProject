@@ -7,9 +7,8 @@
 
 #define DRIVER_NAME "spi-lpd8806"
 
-#define STRAND_LEN 160 // Number of LEDs on strand
+#define STRAND_LEN 160 // Length of data memory
 
-// SPI 2.0 running at 10MHz
 #define SPI_BUS_NUM 2
 #define SPI_BUS_SPEED 10000000
 #define SPI_CS 0
@@ -82,44 +81,38 @@ static ssize_t lpd8806_show(struct lpd8806_obj *obj, struct lpd8806_attr *attr, 
   }
 }
 
-static int update_strand(struct lpd8806_obj *obj) {
+static void update_strand(struct lpd8806_obj *obj) {
   int ret;
   unsigned char latch[] = {0, 0, 0, 0, 0, 0};
   ret = spi_write(device, &obj->data[0], 3 * STRAND_LEN);
   if (ret != 0) {
     printk("LPD8806 Strand Write Failure: %d", ret);
-    return 1;
   }
   ret = spi_write(device, latch, 6);
   if (ret != 0) {
     printk("LPD8806 Strand Latch Failure: %d", ret);
-    return 1;
   }
-  return 0;
 }
 
 static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr, const char *buf, size_t count) {
   if (strcmp(attr->attr.name, "grb") == 0) {
     int i;
     unsigned char g, r, b;
-    if (sscanf(buf, "%hhu %hhu %hhu", &g, &r, &b) == 3) {
-      obj->grb[0] = g | 0x80;
-      obj->grb[1] = r | 0x80;
-      obj->grb[2] = b | 0x80;
-      
-      for (i = 3 * (STRAND_LEN - 1); i > 0; i -= 3) {
-        obj->data[i] = obj->data[i-3];
-        obj->data[i+1] = obj->data[i-2];
-        obj->data[i+2] = obj->data[i-1];
-      }
-      obj->data[0] = obj->grb[0];
-      obj->data[1] = obj->grb[1];
-      obj->data[2] = obj->grb[2];
-      
-      if (update_strand(obj) == 0) {
-        return count;
-      }
+    sscanf(buf, "%hhu %hhu %hhu", &g, &r, &b);
+    obj->grb[0] = g | 0x80;
+    obj->grb[1] = r | 0x80;
+    obj->grb[2] = b | 0x80;
+    
+    for (i = 3 * (STRAND_LEN - 1); i > 0; i -= 3) {
+      obj->data[i] = obj->data[i-3];
+      obj->data[i+1] = obj->data[i-2];
+      obj->data[i+2] = obj->data[i-1];
     }
+    obj->data[0] = obj->grb[0];
+    obj->data[1] = obj->grb[1];
+    obj->data[2] = obj->grb[2];
+    update_strand(obj);
+    return count;
   } else if (strcmp(attr->attr.name, "data") == 0) {
     int i = 0;
     unsigned char color;
@@ -133,7 +126,7 @@ static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr,
         if (sscanf(tok, "%hhu", &color) == 1) {
           obj->data[i] = color | 0x80;
           i++;
-          if (i == 3 * STRAND_LEN) {
+          if (i == 3*STRAND_LEN) {
             break;
           }
         }
@@ -142,11 +135,9 @@ static ssize_t lpd8806_store(struct lpd8806_obj *obj, struct lpd8806_attr *attr,
       obj->grb[0] = obj->data[0];
       obj->grb[1] = obj->data[1];
       obj->grb[2] = obj->data[2];
-      
+      update_strand(obj);
       kfree(temp);
-      if (update_strand(obj) == 0) {
-        return count;
-      }
+      return count;
     }
   }
   return 0;
@@ -206,7 +197,7 @@ static void destroy_lpd8806_obj(struct lpd8806_obj *obj) {
 
 static int __init lpd8806_init(void) {
   int status;
-  unsigned char latch[] = {0, 0, 0};
+  unsigned char latch[] = {0, 0, 0, 0, 0, 0};
   struct spi_master *master;
   struct device *temp;
   char buff[20];
@@ -261,14 +252,17 @@ static int __init lpd8806_init(void) {
   status = spi_add_device(device);
   
   if (status < 0) {
-    spi_dev_put(device);
+    spi_unregister_device(device);
     destroy_lpd8806_obj(device_obj);
     kset_unregister(lpd8806_kset);
     printk("LPD8806 Driver Init Failed: Add Device Failed\n");
     return status;
   }
   
-  if (spi_write(device, latch, 3) != 0) {
+  if (spi_write(device, latch, 6) != 0) {
+    spi_unregister_device(device);
+    destroy_lpd8806_obj(device_obj);
+    kset_unregister(lpd8806_kset);
     printk("LPD8806 Driver Init Failed: Prime SPI Failed\n");
   }
   
