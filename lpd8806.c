@@ -5,7 +5,7 @@
 #include <asm/uaccess.h>
 #include <linux/spi/spi.h>
 
-#define DRIVER_NAME "spi-lpd8806"
+#define DRIVER_NAME "lpd8806"
 
 #define STRAND_LEN 160 // Length of data memory
 
