@@ -64,7 +64,7 @@ void signal_handler(int signo){
 }
 
 int main() { 
-  grb_fp = fopen("/sys/firmware/spi-lpd8806/device/grb", "w");
+  grb_fp = fopen("/sys/firmware/lpd8806/device/grb", "w");
   setbuf(grb_fp, NULL);
   if (grb_fp == NULL) {
     return 1;

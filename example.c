@@ -6,6 +6,19 @@
 
 #define DATA_LEN 10 // Length of data memory
 
+
+/*
+ * This is an example sysfs driver that creates a new kset called 
+ * "example" inside /sys/firmware/. It adds to this one kobject called 
+ * "device". Inside device are the attributes "test" and "data". The
+ * "test" attribute stores an integer, and the "data" attribute stores
+ * a string of length DATA_LEN (defined above).
+ */
+ 
+
+/*
+ * This struct defines the attributes associated with our kobject.
+ */
 struct example_obj {
   struct kobject kobj;
   unsigned int test;
@@ -13,6 +26,9 @@ struct example_obj {
 };
 #define to_example_obj(x) container_of(x, struct example_obj, kobj)
 
+/*
+ * This struct contains the file operations for the kobject attributes.
+ */
 struct example_attr {
   struct attribute attr;
   ssize_t (*show)(struct example_obj *obj, struct example_attr *attr, char *buf);
@@ -20,6 +36,10 @@ struct example_attr {
 };
 #define to_example_attr(x) container_of(x, struct example_attr, attr)
 
+/*
+ * This is boilerplate. It takes the attribute coming in and calls its
+ * show function.
+ */
 static ssize_t example_attr_show(struct kobject *kobj, struct attribute *attr, char *buf) {
   struct example_attr *attribute;
   struct example_obj *obj;
@@ -33,6 +53,10 @@ static ssize_t example_attr_show(struct kobject *kobj, struct attribute *attr, c
   return attribute->show(obj, attribute, buf);
 }
 
+/*
+ * This is boilerplate. It takes the attribute coming in and calls its
+ * store function.
+ */
 static ssize_t example_attr_store(struct kobject *kobj, struct attribute *attr, const char *buf, size_t len) {
   struct example_attr *attribute;
   struct example_obj *obj;
@@ -46,17 +70,27 @@ static ssize_t example_attr_store(struct kobject *kobj, struct attribute *attr, 
   return attribute->store(obj, attribute, buf, len);
 }
 
+/*
+ * This struct contains the sysfs file operations.
+ */
 static struct sysfs_ops example_sysfs_ops = {
   .show = example_attr_show,
   .store = example_attr_store
 };
 
+/*
+ * Convenience function for freeing our kobject.
+ */
 static void example_release(struct kobject *kobj) {
   struct example_obj *obj;
   obj = to_example_obj(kobj);
   kfree(obj);
 }
 
+/*
+ * This is the show function for our attributes. This will get called
+ * whenever one of the sysfs files is read from.
+ */
 static ssize_t example_show(struct example_obj *obj, struct example_attr *attr, char *buf) {
   if (strcmp(attr->attr.name, "data") == 0) {
     return sprintf(buf, "%s", obj->data);
@@ -67,6 +101,10 @@ static ssize_t example_show(struct example_obj *obj, struct example_attr *attr, 
   }
 }
 
+/*
+ * This is the store functino for our attributes. This will get called
+ * whenever one of the sysfs files is written to.
+ */
 static ssize_t example_store(struct example_obj *obj, struct example_attr *attr, const char *buf, size_t count) {
   if (strcmp(attr->attr.name, "data") == 0) {
     if (count <= DATA_LEN) {
@@ -81,24 +119,41 @@ static ssize_t example_store(struct example_obj *obj, struct example_attr *attr,
   }
 }
 
+/*
+ * These structs link the attributes with their files and sysfs 
+ * functions.
+ */
 static struct example_attr test_attr = __ATTR(test, 0666, example_show, example_store);
 static struct example_attr data_attr = __ATTR(data, 0666, example_show, example_store);
 
+/*
+ * This struct stores all of the attributes for our kobject.
+ */
 static struct attribute *example_default_attrs[] = {
   &test_attr.attr,
   &data_attr.attr,
   NULL
 };
 
+/*
+ * This defines the structure of our kobject.
+ */
 static struct kobj_type example_ktype = {
   .sysfs_ops = &example_sysfs_ops,
   .release = example_release,
   .default_attrs = example_default_attrs
 };
 
+/*
+ * These are used in initialization.
+ */
 static struct kset *example_kset;
 static struct example_obj *test_obj;
 
+/*
+ * This creates a new kobject and adds it to our kset created in the
+ * initialization.
+ */
 static struct example_obj *create_example_obj(const char *name) {
   struct example_obj *obj;
   int retval;
@@ -129,10 +184,16 @@ static struct example_obj *create_example_obj(const char *name) {
   return obj;
 }
 
+/*
+ * This should call the kobject release function
+ */
 static void destroy_example_obj(struct example_obj *obj) {
   kobject_put(&obj->kobj);
 }
 
+/*
+ * This is the initialization function for the driver.
+ */
 static int __init example_init(void) {
   example_kset = kset_create_and_add("example", NULL, firmware_kobj);
   if (!example_kset) {
@@ -151,6 +212,9 @@ static int __init example_init(void) {
   return 0;
 }
 
+/*
+ * This is the deinitialization function for the driver
+ */
 static void __exit example_exit(void) {
   destroy_example_obj(test_obj);
   kset_unregister(example_kset);
