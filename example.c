@@ -9,10 +9,10 @@
 
 /*
  * This is an example sysfs driver that creates a new kset called 
- * "example" inside /sys/firmware/. It adds to this one kobject called 
- * "device". Inside device are the attributes "test" and "data". The
- * "test" attribute stores an integer, and the "data" attribute stores
- * a string of length DATA_LEN (defined above).
+ * "example" inside "/sys/firmware/". It adds to this one kobject called 
+ * "device". Inside "device" are the files for two  attributes: "test" 
+ * and "data". The "test" attribute stores an integer, and the "data" 
+ * attribute stores a string of length DATA_LEN (defined above).
  */
  
 
@@ -102,7 +102,7 @@ static ssize_t example_show(struct example_obj *obj, struct example_attr *attr, 
 }
 
 /*
- * This is the store functino for our attributes. This will get called
+ * This is the store function for our attributes. This will get called
  * whenever one of the sysfs files is written to.
  */
 static ssize_t example_store(struct example_obj *obj, struct example_attr *attr, const char *buf, size_t count) {
@@ -185,7 +185,7 @@ static struct example_obj *create_example_obj(const char *name) {
 }
 
 /*
- * This should call the kobject release function
+ * This should call the kobject release function.
  */
 static void destroy_example_obj(struct example_obj *obj) {
   kobject_put(&obj->kobj);
@@ -213,7 +213,7 @@ static int __init example_init(void) {
 }
 
 /*
- * This is the deinitialization function for the driver
+ * This is the deinitialization function for the driver.
  */
 static void __exit example_exit(void) {
   destroy_example_obj(test_obj);
